@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Book, LogIn, Menu, Sunset, Trees, UserPlus, X, Zap } from "lucide-react";
 import {
   Accordion,
@@ -88,13 +89,23 @@ const Navbar1 = ({
   activeItem,
   onActiveChange,
 }: Navbar1Props) => {
+  const router = useRouter();
+  
   // Local state for active item if not controlled from parent
   const [localActiveItem, setLocalActiveItem] = useState<string>(activeItem || '');
 
   // Handle both local and parent state
   const handleItemClick = (itemTitle: string) => {
     setLocalActiveItem(itemTitle);
-    //ensure the method is availabe in the parent component
+    
+    // Handle navigation to dashboard pages for Docs and Blog
+    if (itemTitle === "Docs") {
+      router.push("/dashboard/docs");
+    } else if (itemTitle === "Blog") {
+      router.push("/dashboard/blogs");
+    }
+    
+    // Ensure the method is available in the parent component
     if (onActiveChange) {
       onActiveChange(itemTitle);
     }
@@ -223,8 +234,8 @@ const renderMenuItem = (item: MenuItem, isActive: boolean, onItemClick: (title: 
         } transition-colors hover:bg-muted hover:text-blue-600 relative after:absolute after:bottom-0 after:left-0 after:h-0.5 after:bg-blue-600 after:transition-all after:duration-300 after:ease-in-out hover:after:w-full mx-2`}
       href={item.url}
       onClick={(e) => {
-        // If it's just a hash URL, prevent default navigation
-        if (item.url === '#') {
+        // Always prevent default for items that should use Next.js routing
+        if (item.title === "Docs" || item.title === "Blog" || item.url === '#') {
           e.preventDefault();
         }
         onItemClick(item.title);
@@ -269,8 +280,8 @@ const renderMobileMenuItem = (item: MenuItem, isActive: boolean, onItemClick: (t
           : 'text-gray-800 hover:bg-gray-100'
         }`}
       onClick={(e) => {
-        // If it's just a hash URL, prevent default navigation
-        if (item.url === '#') {
+        // Always prevent default for items that should use Next.js routing
+        if (item.title === "Docs" || item.title === "Blog" || item.url === '#') {
           e.preventDefault();
         }
         onItemClick(item.title);
