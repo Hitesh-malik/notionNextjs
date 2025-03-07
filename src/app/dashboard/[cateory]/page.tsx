@@ -16,6 +16,16 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
+// Import react-notion-x and related dependencies
+import { NotionRenderer } from 'react-notion-x';
+// Import required styles
+import 'react-notion-x/src/styles.css';
+// Uncomment these if you need additional styling features
+// import 'prismjs/themes/prism-tomorrow.css'; // For code syntax highlighting
+// import 'katex/dist/katex.min.css'; // For math equations
+
+
+
 export default function Page() {
   const pathname = usePathname();
 
@@ -41,20 +51,28 @@ export default function Page() {
   };
 
   // Initialize state with the value from URL
-  const [activeNavItem, setActiveNavItem] = useState<string>(getInitialActiveItem());
+  const [activeNavItem, setActiveNavItem] = useState(getInitialActiveItem());
 
   // State to store the fetched data
-  const [notionData, setNotionData] = useState<any[]>([]);
+  const [notionData, setNotionData] = useState([]);
 
   // State for loading status
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // State for errors
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
-  //sidebar menu clicked item
-  const [clickedItem, setClickedItem] = useState<string | null>(null);
-  console.log("clickedItem", clickedItem);
+  // Sidebar menu clicked item
+  const [clickedItem, setClickedItem] = useState(null);
+
+  // State to store the fetched page content
+  const [pageContent, setPageContent] = useState(null);
+
+  // State for page content loading status
+  const [pageLoading, setPageLoading] = useState(false);
+
+  // State for page content errors
+  const [pageError, setPageError] = useState(null);
 
   // Update activeNavItem when pathname changes
   useEffect(() => {
@@ -62,7 +80,7 @@ export default function Page() {
   }, [pathname]);
 
   // Handler for updating active nav item
-  const handleNavItemChange = (itemTitle: string) => {
+  const handleNavItemChange = (itemTitle) => {
     setActiveNavItem(itemTitle);
     console.log("Active navigation item changed to:", itemTitle);
   };
@@ -118,6 +136,66 @@ export default function Page() {
     }
   }, [activeNavItem]); // Re-fetch when activeNavItem changes
 
+  // Fetch page content when clickedItem changes
+  useEffect(() => {
+    async function fetchPageContent() {
+      if (!clickedItem) return;
+
+      setPageLoading(true);
+      setPageError(null);
+      setPageContent(null);
+
+      try {
+        // Extract page ID from the URL
+        // First try to use the id directly, then extract from URL if needed
+        const notionPageId = clickedItem.id ||
+          (clickedItem.url ?
+            extractPageIdFromUrl(clickedItem.url) :
+            null);
+
+        if (!notionPageId) {
+          throw new Error("Could not determine Notion page ID");
+        }
+
+        console.log(`Fetching content for Notion page ID: ${notionPageId}`);
+
+        // Use the notion-client library to fetch the page content directly
+        // This returns data in the format that react-notion-x expects
+        const recordMap = await fetch(`/api/notion?pageId=${notionPageId}`);
+        const pageData = await recordMap.json();
+
+        console.log('Fetched page content:', pageData);
+        setPageContent(pageData);
+      } catch (err) {
+        console.error('Failed to fetch page content:', err);
+        if (err instanceof Error) {
+          setPageError(err.message);
+        } else {
+          setPageError(String(err));
+        }
+      } finally {
+        setPageLoading(false);
+      }
+    }
+    fetchPageContent();
+  }, [clickedItem]);
+
+  // Extract page ID from Notion URL
+  function extractPageIdFromUrl(url) {
+    // Extract the last part of the URL which typically contains the page ID
+    const urlParts = url.split('/');
+    const lastPart = urlParts[urlParts.length - 1];
+
+    // If the last part contains a hyphen, extract the ID part after the last hyphen
+    if (lastPart.includes('-')) {
+      const parts = lastPart.split('-');
+      return parts[parts.length - 1];
+    }
+
+    // If no hyphen, return the last part as is
+    return lastPart;
+  }
+
   return (
     <div className="flex flex-col h-screen">
       {/* Fixed Top Navigation Bar with active state management */}
@@ -129,12 +207,11 @@ export default function Page() {
       </div>
 
       {/* Content Area with Left Sidebar */}
-      <div className="flex flex-1 overflow-hidden ">
+      <div className="flex flex-1 overflow-hidden">
         {/* App Sidebar (Nav) wrapped in provider but outside the inset */}
         <SidebarProvider>
           <div className="w-64 border-r bg-muted/20 h-[calc(100vh-64px)] overflow-y-auto hidden md:block">
             <AppSidebar
-              // className="mt-[1em]" 
               setClickedItem={setClickedItem}
               notionData={notionData}
               isLoading={isLoading}
@@ -157,7 +234,7 @@ export default function Page() {
                   <BreadcrumbSeparator className="hidden md:block" />
                   <BreadcrumbItem>
                     <BreadcrumbPage>
-                      {activeNavItem === "Blog" ? "Blog Posts" : "Data Fetching"}
+                      {clickedItem ? clickedItem.title : (activeNavItem === "Blog" ? "Blog Posts" : "Data Fetching")}
                     </BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
@@ -166,15 +243,37 @@ export default function Page() {
 
             {/* Main Page Content */}
             <div className="flex-1 p-4 overflow-y-auto">
-              {/* Debug info - remove in production */}
-              {/* <div className="mb-4 text-sm text-gray-500">
-                Active Nav: {activeNavItem} |
-                Items: {notionData.length} |
-                Status: {isLoading ? 'Loading...' : error ? 'Error' : 'Ready'} |
-                Path: {pathname}
-              </div> */}
-
-              <div className="min-h-[40vh] flex-1 rounded-xl bg-muted/50 mt-4" />
+              {pageLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                </div>
+              ) : pageError ? (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                  <p>Error loading content: {pageError}</p>
+                </div>
+              ) : clickedItem ? (
+                <div className="notion-container max-w-4xl mx-auto py-6">
+                  {pageContent ? (
+                    <NotionRenderer
+                      recordMap={pageContent ?? {}}
+                      fullPage={false}
+                      darkMode={false}
+                    // Uncomment if you have components for these block types
+                    // components={{
+                    //   code: Code,
+                    //   collection: Collection,
+                    //   equation: Equation
+                    // }}
+                    />
+                  ) : (
+                    <p className="text-muted-foreground">No content available for this item.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  <p>Select an item from the sidebar to view its content.</p>
+                </div>
+              )}
             </div>
           </div>
         </SidebarProvider>

@@ -31,6 +31,7 @@ export function AppSidebar({
     
     // Pass the complete item data back to the parent component
     if (setClickedItem) {
+      console.log("Item clicked:", item);
       setClickedItem(item);
     }
   };

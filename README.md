@@ -38,3 +38,14 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 
 // next.js app route // typescript //schadecn ui library //notion cms 
+<!-- # Installation -->
+<!-- # Install the required packages -->
+<!-- npm install react-notion-x notion-client notion-types notion-utils -->
+
+<!-- # Optional: For code syntax highlighting -->
+<!-- npm install prismjs -->
+<!-- npm install @types/prismjs --save-dev -->
+<!-- 
+# Optional: For math equations
+npm install katex
+npm install @types/katex --save-dev -->
