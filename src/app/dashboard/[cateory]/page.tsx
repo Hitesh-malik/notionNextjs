@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Navbar1 } from "@/components/Navbar1";
 import {
@@ -30,11 +30,15 @@ interface NotionItem {
   id: string;
   title: string;
   url?: string;
+  slug?: string;
+  category?: string;
   // Add any other properties that might be present in your Notion items
 }
 
 export default function Page() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const slug = searchParams.get('slug');
 
   // Extract the last segment from the URL path
   const getInitialActiveItem = (): string => {
@@ -73,7 +77,7 @@ export default function Page() {
   const [clickedItem, setClickedItem] = useState<NotionItem | null>(null);
 
   // State to store the fetched page content
-  const [pageContent, setPageContent] = useState<ExtendedRecordMap | null>(null);
+  const [pageBlocks, setPageBlocks] = useState<any[] | null>(null);
 
   // State for page content loading status
   const [pageLoading, setPageLoading] = useState<boolean>(false);
@@ -86,11 +90,76 @@ export default function Page() {
     setActiveNavItem(getInitialActiveItem());
   }, [pathname]);
 
+  // Check for slug in URL params on first load
+  useEffect(() => {
+    if (slug) {
+      fetchPageBySlug(slug);
+    }
+  }, [slug]);
+
   // Handler for updating active nav item
   const handleNavItemChange = (itemTitle: string): void => {
     setActiveNavItem(itemTitle);
     console.log("Active navigation item changed to:", itemTitle);
   };
+
+  // Fetch page by slug
+  async function fetchPageBySlug(slug: string) {
+    setPageLoading(true);
+    setPageError(null);
+    
+    try {
+      console.log(`Fetching page by slug: ${slug}`);
+      const response = await fetch(`/api/notion?slug=${slug}`);
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching page by slug: ${response.statusText}`);
+      }
+      
+      const pageData = await response.json();
+      console.log('Fetched page by slug:', pageData);
+      
+      // Create a NotionItem from the fetched page data
+      const pageItem: NotionItem = {
+        id: pageData.id,
+        title: extractTitleFromPage(pageData),
+        url: pageData.url
+      };
+      
+      setClickedItem(pageItem);
+      
+      // Now fetch the page blocks
+      await fetchPageBlocks(pageData.id);
+      
+    } catch (err) {
+      console.error('Failed to fetch page by slug:', err);
+      if (err instanceof Error) {
+        setPageError(err.message);
+      } else {
+        setPageError(String(err));
+      }
+    } finally {
+      setPageLoading(false);
+    }
+  }
+
+  // Extract title from a Notion page object
+  function extractTitleFromPage(page: any): string {
+    // Try to find the title property
+    for (const [key, value] of Object.entries(page.properties || {})) {
+      if ((value as any).type === 'title') {
+        const titleValue = (value as any).title;
+        if (titleValue && titleValue.length > 0) {
+          return titleValue[0].plain_text || 'Untitled';
+        }
+      }
+    }
+    
+    // Fallbacks if no title property is found
+    return page.properties?.Title?.title?.[0]?.plain_text ||
+           page.properties?.Name?.title?.[0]?.plain_text ||
+           'Untitled';
+  }
 
   // Fetch data from Notion API based on active navigation item
   useEffect(() => {
@@ -143,49 +212,60 @@ export default function Page() {
     }
   }, [activeNavItem]); // Re-fetch when activeNavItem changes
 
-  // Fetch page content when clickedItem changes
+  // Fetch page blocks when clickedItem changes
   useEffect(() => {
-    async function fetchPageContent() {
-      if (!clickedItem) return;
-
-      setPageLoading(true);
-      setPageError(null);
-      setPageContent(null);
-
-      try {
-        // Extract page ID from the URL
-        // First try to use the id directly, then extract from URL if needed
-        const notionPageId = clickedItem.id ||
-          (clickedItem.url ?
-            extractPageIdFromUrl(clickedItem.url) :
-            null);
-
-        if (!notionPageId) {
-          throw new Error("Could not determine Notion page ID");
-        }
-
-        console.log(`Fetching content for Notion page ID: ${notionPageId}`);
-
-        // Use the notion-client library to fetch the page content directly
-        // This returns data in the format that react-notion-x expects
-        const recordMap = await fetch(`/api/notion?pageId=${notionPageId}`);
-        const pageData = await recordMap.json();
-
-        console.log('Fetched page content:', pageData);
-        setPageContent(pageData);
-      } catch (err) {
-        console.error('Failed to fetch page content:', err);
-        if (err instanceof Error) {
-          setPageError(err.message);
-        } else {
-          setPageError(String(err));
-        }
-      } finally {
-        setPageLoading(false);
-      }
+    if (clickedItem?.id) {
+      fetchPageBlocks(clickedItem.id);
     }
-    fetchPageContent();
-  }, [clickedItem]);
+  }, [clickedItem?.id]);
+
+  // Function to fetch page blocks
+  async function fetchPageBlocks(pageId: string) {
+    if (!pageId) return;
+
+    setPageLoading(true);
+    setPageError(null);
+    setPageBlocks(null);
+
+    try {
+      console.log(`Fetching blocks for Notion page ID: ${pageId}`);
+
+      const response = await fetch(`/api/notion?pageId=${pageId}`);
+      
+      if (!response.ok) {
+        throw new Error(`Error fetching page blocks: ${response.statusText}`);
+      }
+      
+      const blocksData = await response.json();
+      console.log('Fetched page blocks:', blocksData);
+      
+      // Check if we need to create a compatible format for NotionRenderer
+      // The react-notion-x library expects a specific recordMap format
+      if (Array.isArray(blocksData)) {
+        // Store the blocks directly - we'll use our custom renderer
+        setPageBlocks(blocksData);
+      } else if (typeof blocksData === 'object' && blocksData !== null) {
+        // If it's already in recordMap format, use it directly
+        if ('block' in blocksData) {
+          setPageBlocks(blocksData);
+        } else {
+          // Otherwise, we need to convert to our custom format
+          setPageBlocks(blocksData);
+        }
+      } else {
+        throw new Error("Received invalid data format from API");
+      }
+    } catch (err) {
+      console.error('Failed to fetch page blocks:', err);
+      if (err instanceof Error) {
+        setPageError(err.message);
+      } else {
+        setPageError(String(err));
+      }
+    } finally {
+      setPageLoading(false);
+    }
+  }
 
   // Extract page ID from Notion URL
   function extractPageIdFromUrl(url: string): string {
@@ -202,6 +282,163 @@ export default function Page() {
     // If no hyphen, return the last part as is
     return lastPart;
   }
+
+  // NotionRenderer only accepts recordMap format, not direct blocks
+  const getNotionRendererProps = () => {
+    return {
+      recordMap: pageBlocks as unknown as ExtendedRecordMap,
+      fullPage: false,
+      darkMode: false
+    };
+  };
+
+  // Render Notion content based on the format of blocks
+  const renderNotionContent = () => {
+    if (!pageBlocks) return null;
+    
+    try {
+      // Check if we have the new block-based format or the old recordMap format
+      if (Array.isArray(pageBlocks)) {
+        // Use a custom renderer for block-based content
+        return (
+          <div className="notion-content">
+            {renderBlockContent(pageBlocks)}
+          </div>
+        );
+      } else {
+        // If we have a recordMap in the right format, use NotionRenderer
+        // Otherwise, throw an error to fall back to our custom renderer
+        if (typeof pageBlocks === 'object' && pageBlocks !== null && 'block' in pageBlocks) {
+          return (
+            <NotionRenderer
+              recordMap={pageBlocks as unknown as ExtendedRecordMap}
+              fullPage={false}
+              darkMode={false}
+              // Uncomment if you have components for these block types
+              // components={{
+              //   code: Code,
+              //   collection: Collection,
+              //   equation: Equation
+              // }}
+            />
+          );
+        } else {
+          throw new Error("Incompatible data format for NotionRenderer");
+        }
+      }
+    } catch (err) {
+      console.error("Error rendering Notion content:", err);
+      
+      // Fallback to custom renderer if NotionRenderer fails
+      if (Array.isArray(pageBlocks)) {
+        return (
+          <div className="notion-content">
+            {renderBlockContent(pageBlocks)}
+          </div>
+        );
+      } else {
+        return <p className="text-red-500">Error rendering content. Unsupported Notion block format.</p>;
+      }
+    }
+  };
+
+  // Basic renderer for Notion blocks
+  const renderBlockContent = (blocks: any[]) => {
+    return blocks.map((block, index) => {
+      const { type, id } = block;
+      
+      switch (type) {
+        case 'paragraph':
+          return (
+            <p key={id || index} className="my-2">
+              {block.paragraph?.rich_text?.map((text: any, i: number) => (
+                <span key={i} className={text.annotations?.bold ? 'font-bold' : ''}>
+                  {text.plain_text}
+                </span>
+              )) || ''}
+            </p>
+          );
+        case 'heading_1':
+          return (
+            <h1 key={id || index} className="text-3xl font-bold my-4">
+              {block.heading_1?.rich_text?.map((text: any, i: number) => (
+                <span key={i}>{text.plain_text}</span>
+              )) || ''}
+            </h1>
+          );
+        case 'heading_2':
+          return (
+            <h2 key={id || index} className="text-2xl font-bold my-3">
+              {block.heading_2?.rich_text?.map((text: any, i: number) => (
+                <span key={i}>{text.plain_text}</span>
+              )) || ''}
+            </h2>
+          );
+        case 'heading_3':
+          return (
+            <h3 key={id || index} className="text-xl font-bold my-2">
+              {block.heading_3?.rich_text?.map((text: any, i: number) => (
+                <span key={i}>{text.plain_text}</span>
+              )) || ''}
+            </h3>
+          );
+        case 'bulleted_list_item':
+          return (
+            <ul key={id || index} className="list-disc ml-5 my-2">
+              <li>
+                {block.bulleted_list_item?.rich_text?.map((text: any, i: number) => (
+                  <span key={i}>{text.plain_text}</span>
+                )) || ''}
+              </li>
+            </ul>
+          );
+        case 'numbered_list_item':
+          return (
+            <ol key={id || index} className="list-decimal ml-5 my-2">
+              <li>
+                {block.numbered_list_item?.rich_text?.map((text: any, i: number) => (
+                  <span key={i}>{text.plain_text}</span>
+                )) || ''}
+              </li>
+            </ol>
+          );
+        case 'code':
+          return (
+            <pre key={id || index} className="bg-gray-100 p-4 rounded my-4 overflow-x-auto">
+              <code>
+                {block.code?.rich_text?.map((text: any, i: number) => (
+                  <span key={i}>{text.plain_text}</span>
+                )) || ''}
+              </code>
+            </pre>
+          );
+        case 'image':
+          const imageUrl = block.image?.file?.url || block.image?.external?.url;
+          return imageUrl ? (
+            <div key={id || index} className="my-4">
+              <img 
+                src={imageUrl} 
+                alt={block.image?.caption || "Notion image"} 
+                className="max-w-full h-auto rounded" 
+              />
+              {block.image?.caption && (
+                <p className="text-center text-sm text-gray-500 mt-1">
+                  {block.image.caption}
+                </p>
+              )}
+            </div>
+          ) : null;
+        case 'divider':
+          return <hr key={id || index} className="my-4 border-t border-gray-200" />;
+        default:
+          return (
+            <div key={id || index} className="text-gray-500 my-2">
+              Unsupported block type: {type}
+            </div>
+          );
+      }
+    });
+  };
 
   return (
     <div className="flex flex-col h-screen">
@@ -261,18 +498,8 @@ export default function Page() {
                 </div>
               ) : clickedItem ? (
                 <div className="notion-container max-w-4xl mx-auto py-6">
-                  {pageContent ? (
-                    <NotionRenderer
-                      recordMap={pageContent as ExtendedRecordMap}
-                      fullPage={false}
-                      darkMode={false}
-                    // Uncomment if you have components for these block types
-                    // components={{
-                    //   code: Code,
-                    //   collection: Collection,
-                    //   equation: Equation
-                    // }}
-                    />
+                  {pageBlocks ? (
+                    renderNotionContent()
                   ) : (
                     <p className="text-muted-foreground">No content available for this item.</p>
                   )}

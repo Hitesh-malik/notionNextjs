@@ -13,9 +13,10 @@ export async function GET(request) {
     const url = new URL(request.url);
     const pageId = url.searchParams.get('pageId');
     const type = url.searchParams.get('type');
-    const format = url.searchParams.get('format'); // Add format parameter
+    const format = url.searchParams.get('format');
+    const slug = url.searchParams.get('slug'); // Added slug parameter support
 
-    console.log("API request received:", { pageId, type, format });
+    console.log("API request received:", { pageId, type, format, slug });
 
     // Check for required environment variables
     if (!process.env.NOTION_API_KEY) {
@@ -25,11 +26,29 @@ export async function GET(request) {
       }, { status: 500 });
     }
 
+    // Handle pageId request - fetching page blocks
     if (pageId) {
       console.log(`Fetching page content for pageId: ${pageId}`);
-      const pageData = await getPageContent(pageId);
-      return NextResponse.json(pageData);
-    } else {
+      const pageBlocks = await getPageBlocks(pageId);
+      return NextResponse.json(pageBlocks);
+    } 
+    
+    // Handle slug request - fetching specific page by slug
+    else if (slug) {
+      console.log(`Fetching page by slug: ${slug}`);
+      if (!process.env.NOTION_DATABASE_ID) {
+        console.error("Missing NOTION_DATABASE_ID environment variable");
+        return NextResponse.json({
+          error: "Server configuration error: Missing database ID"
+        }, { status: 500 });
+      }
+      
+      const page = await getPageBySlug(slug);
+      return NextResponse.json(page);
+    }
+    
+    // Handle database queries
+    else {
       // Explicitly check for the type parameter
       if (!type) {
         return NextResponse.json({
@@ -83,16 +102,70 @@ export async function GET(request) {
   }
 }
 
-// Function to get page content with better error logging
-async function getPageContent(pageId) {
+// Updated function to get page blocks with better error logging
+async function getPageBlocks(pageId) {
   try {
     console.log(`Making Notion API call for blocks.children.list with block_id: ${pageId}`);
-    const blocks = await notion.blocks.children.list({ block_id: pageId });
-    console.log(`Successfully fetched ${blocks.results.length} blocks`);
-    return blocks.results;
+    const response = await notion.blocks.children.list({ 
+      block_id: pageId 
+    });
+    console.log(`Successfully fetched ${response.results.length} blocks`);
+    return response.results;
   } catch (error) {
-    console.error(`Error fetching page content for pageId ${pageId}:`, error);
-    throw new Error(`Failed to retrieve page content: ${error.message}`);
+    console.error(`Error fetching page blocks for pageId ${pageId}:`, error);
+    throw new Error(`Failed to retrieve page blocks: ${error.message}`);
+  }
+}
+
+// New function to get a page by slug
+async function getPageBySlug(slug) {
+  try {
+    console.log(`Making Notion API call to fetch page by slug: ${slug}`);
+    const databaseId = process.env.NOTION_DATABASE_ID;
+    
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: "Slug",
+        rich_text: {
+          equals: slug,
+        },
+      },
+    });
+    
+    if (response.results.length === 0) {
+      throw new Error(`No page found with slug: ${slug}`);
+    }
+    
+    console.log(`Successfully fetched page with slug: ${slug}`);
+    return response.results[0];
+  } catch (error) {
+    console.error(`Error fetching page by slug ${slug}:`, error);
+    throw new Error(`Failed to retrieve page by slug: ${error.message}`);
+  }
+}
+
+// Function to get all pages with "Live" status
+async function getPages() {
+  try {
+    const databaseId = process.env.NOTION_DATABASE_ID;
+    console.log(`Making Notion API call for databases.query with database_id: ${databaseId}`);
+
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: "Status",
+        select: {
+          equals: "Live",
+        },
+      },
+    });
+
+    console.log(`Successfully fetched ${response.results.length} live pages`);
+    return response.results;
+  } catch (error) {
+    console.error("Error fetching pages:", error);
+    throw new Error(`Failed to retrieve pages: ${error.message}`);
   }
 }
 
@@ -139,7 +212,7 @@ function simplifyNotionDocuments(notionResponse) {
   // Map through the array of documents and extract only the essential information
   return notionResponse.map(document => {
     // Get the title from the "Documents filed" property (or any title property)
-    const titleProperty = document.properties["Documents  filed"] ||
+    const titleProperty = document.properties["Documents filed"] ||
       document.properties["Title"] ||
       document.properties["Name"] ||
       findTitleProperty(document.properties);
