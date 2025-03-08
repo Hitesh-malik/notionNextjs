@@ -15,15 +15,16 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Sun, Moon, Copy, Check } from "lucide-react";
 
-// Import react-notion-x and related dependencies
+// Only import the core NotionRenderer
 import { NotionRenderer } from 'react-notion-x';
 import type { ExtendedRecordMap } from 'notion-types';
+
 // Import required styles
 import 'react-notion-x/src/styles.css';
-// Uncomment these if you need additional styling features
-// import 'prismjs/themes/prism-tomorrow.css'; // For code syntax highlighting
-// import 'katex/dist/katex.min.css'; // For math equations
 
 // Define types for the Notion data
 interface NotionItem {
@@ -32,7 +33,6 @@ interface NotionItem {
   url?: string;
   slug?: string;
   category?: string;
-  // Add any other properties that might be present in your Notion items
 }
 
 export default function Page() {
@@ -63,27 +63,16 @@ export default function Page() {
 
   // Initialize state with the value from URL
   const [activeNavItem, setActiveNavItem] = useState<string>(getInitialActiveItem());
-
-  // State to store the fetched data
   const [notionData, setNotionData] = useState<NotionItem[]>([]);
-
-  // State for loading status
   const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  // State for errors
   const [error, setError] = useState<string | null>(null);
-
-  // Sidebar menu clicked item
   const [clickedItem, setClickedItem] = useState<NotionItem | null>(null);
-
-  // State to store the fetched page content
   const [pageBlocks, setPageBlocks] = useState<any[] | null>(null);
-
-  // State for page content loading status
+  const [recordMap, setRecordMap] = useState<ExtendedRecordMap | null>(null);
   const [pageLoading, setPageLoading] = useState<boolean>(false);
-
-  // State for page content errors
   const [pageError, setPageError] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
 
   // Update activeNavItem when pathname changes
   useEffect(() => {
@@ -96,6 +85,23 @@ export default function Page() {
       fetchPageBySlug(slug);
     }
   }, [slug]);
+
+  // Set up dark mode based on system preference initially
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      setDarkMode(prefersDark);
+    }
+  }, []);
+
+  // Update body class when dark mode changes
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
 
   // Handler for updating active nav item
   const handleNavItemChange = (itemTitle: string): void => {
@@ -226,6 +232,7 @@ export default function Page() {
     setPageLoading(true);
     setPageError(null);
     setPageBlocks(null);
+    setRecordMap(null);
 
     try {
       console.log(`Fetching blocks for Notion page ID: ${pageId}`);
@@ -239,21 +246,16 @@ export default function Page() {
       const blocksData = await response.json();
       console.log('Fetched page blocks:', blocksData);
       
-      // Check if we need to create a compatible format for NotionRenderer
-      // The react-notion-x library expects a specific recordMap format
-      if (Array.isArray(blocksData)) {
-        // Store the blocks directly - we'll use our custom renderer
+      // Check if the response format is compatible with NotionRenderer
+      if (typeof blocksData === 'object' && blocksData !== null && 'block' in blocksData) {
+        // If it's in recordMap format, use it with NotionRenderer
+        setRecordMap(blocksData as ExtendedRecordMap);
+      } else if (Array.isArray(blocksData)) {
+        // If it's an array of blocks, use it with the custom renderer
         setPageBlocks(blocksData);
-      } else if (typeof blocksData === 'object' && blocksData !== null) {
-        // If it's already in recordMap format, use it directly
-        if ('block' in blocksData) {
-          setPageBlocks(blocksData);
-        } else {
-          // Otherwise, we need to convert to our custom format
-          setPageBlocks(blocksData);
-        }
       } else {
-        throw new Error("Received invalid data format from API");
+        // If it's not in a recognized format, show an error
+        setPageError("Unknown data format from API.");
       }
     } catch (err) {
       console.error('Failed to fetch page blocks:', err);
@@ -267,82 +269,7 @@ export default function Page() {
     }
   }
 
-  // Extract page ID from Notion URL
-  function extractPageIdFromUrl(url: string): string {
-    // Extract the last part of the URL which typically contains the page ID
-    const urlParts = url.split('/');
-    const lastPart = urlParts[urlParts.length - 1];
-
-    // If the last part contains a hyphen, extract the ID part after the last hyphen
-    if (lastPart.includes('-')) {
-      const parts = lastPart.split('-');
-      return parts[parts.length - 1];
-    }
-
-    // If no hyphen, return the last part as is
-    return lastPart;
-  }
-
-  // NotionRenderer only accepts recordMap format, not direct blocks
-  const getNotionRendererProps = () => {
-    return {
-      recordMap: pageBlocks as unknown as ExtendedRecordMap,
-      fullPage: false,
-      darkMode: false
-    };
-  };
-
-  // Render Notion content based on the format of blocks
-  const renderNotionContent = () => {
-    if (!pageBlocks) return null;
-    
-    try {
-      // Check if we have the new block-based format or the old recordMap format
-      if (Array.isArray(pageBlocks)) {
-        // Use a custom renderer for block-based content
-        return (
-          <div className="notion-content">
-            {renderBlockContent(pageBlocks)}
-          </div>
-        );
-      } else {
-        // If we have a recordMap in the right format, use NotionRenderer
-        // Otherwise, throw an error to fall back to our custom renderer
-        if (typeof pageBlocks === 'object' && pageBlocks !== null && 'block' in pageBlocks) {
-          return (
-            <NotionRenderer
-              recordMap={pageBlocks as unknown as ExtendedRecordMap}
-              fullPage={false}
-              darkMode={false}
-              // Uncomment if you have components for these block types
-              // components={{
-              //   code: Code,
-              //   collection: Collection,
-              //   equation: Equation
-              // }}
-            />
-          );
-        } else {
-          throw new Error("Incompatible data format for NotionRenderer");
-        }
-      }
-    } catch (err) {
-      console.error("Error rendering Notion content:", err);
-      
-      // Fallback to custom renderer if NotionRenderer fails
-      if (Array.isArray(pageBlocks)) {
-        return (
-          <div className="notion-content">
-            {renderBlockContent(pageBlocks)}
-          </div>
-        );
-      } else {
-        return <p className="text-red-500">Error rendering content. Unsupported Notion block format.</p>;
-      }
-    }
-  };
-
-  // Basic renderer for Notion blocks
+  // Custom renderer for Notion blocks
   const renderBlockContent = (blocks: any[]) => {
     return blocks.map((block, index) => {
       const { type, id } = block;
@@ -403,14 +330,28 @@ export default function Page() {
             </ol>
           );
         case 'code':
+          const code = block.code?.rich_text?.map((text: any) => text.plain_text).join('') || '';
           return (
-            <pre key={id || index} className="bg-gray-100 p-4 rounded my-4 overflow-x-auto">
-              <code>
-                {block.code?.rich_text?.map((text: any, i: number) => (
-                  <span key={i}>{text.plain_text}</span>
-                )) || ''}
-              </code>
-            </pre>
+            <div key={id || index} className="relative group">
+              <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded my-4 overflow-x-auto">
+                <code>{code}</code>
+              </pre>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(code);
+                  setCopiedBlockId(id);
+                  setTimeout(() => setCopiedBlockId(null), 2000);
+                }}
+                className="absolute top-2 right-2 h-8 w-8 p-0 opacity-0 group-hover:opacity-100"
+              >
+                {copiedBlockId === id ? 
+                  <Check className="h-4 w-4 text-green-500" /> : 
+                  <Copy className="h-4 w-4" />
+                }
+              </Button>
+            </div>
           );
         case 'image':
           const imageUrl = block.image?.file?.url || block.image?.external?.url;
@@ -429,7 +370,7 @@ export default function Page() {
             </div>
           ) : null;
         case 'divider':
-          return <hr key={id || index} className="my-4 border-t border-gray-200" />;
+          return <hr key={id || index} className="my-4 border-t border-gray-200 dark:border-gray-700" />;
         default:
           return (
             <div key={id || index} className="text-gray-500 my-2">
@@ -440,8 +381,13 @@ export default function Page() {
     });
   };
 
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
   return (
-    <div className="flex flex-col h-screen">
+    <div className={`flex flex-col h-screen ${darkMode ? 'dark' : ''}`}>
       {/* Fixed Top Navigation Bar with active state management */}
       <div className="sticky top-0 z-50 border-b bg-background">
         <Navbar1
@@ -466,40 +412,64 @@ export default function Page() {
 
           {/* Main Content Area */}
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Secondary Header with Breadcrumb */}
-            <header className="flex h-16 items-center gap-2 border-b px-4 bg-background sticky top-0 z-40">
-              <SidebarTrigger className="md:hidden -ml-1" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">
-                    <BreadcrumbLink href="#">
-                      {activeNavItem === "Blog" ? "Blog" : "Docs"}
-                    </BreadcrumbLink>
-                  </BreadcrumbItem>
-                  <BreadcrumbSeparator className="hidden md:block" />
-                  <BreadcrumbItem>
-                    <BreadcrumbPage>
-                      {clickedItem ? clickedItem.title : (activeNavItem === "Blog" ? "Blog Posts" : "Data Fetching")}
-                    </BreadcrumbPage>
-                  </BreadcrumbItem>
-                </BreadcrumbList>
-              </Breadcrumb>
+            {/* Secondary Header with Breadcrumb and dark mode toggle */}
+            <header className="flex h-16 items-center justify-between gap-2 border-b px-4 bg-background sticky top-0 z-40">
+              <div className="flex items-center gap-2">
+                <SidebarTrigger className="md:hidden -ml-1" />
+                <Breadcrumb>
+                  <BreadcrumbList>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbLink href="#">
+                        {activeNavItem === "Blog" ? "Blog" : "Docs"}
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage>
+                        {clickedItem ? clickedItem.title : (activeNavItem === "Blog" ? "Blog Posts" : "Data Fetching")}
+                      </BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </BreadcrumbList>
+                </Breadcrumb>
+              </div>
+              
+              {/* Dark mode toggle */}
+              <div className="flex items-center gap-2">
+                <Sun className="h-4 w-4" />
+                <Switch 
+                  checked={darkMode} 
+                  onCheckedChange={toggleDarkMode} 
+                  aria-label="Toggle dark mode"
+                />
+                <Moon className="h-4 w-4" />
+              </div>
             </header>
 
             {/* Main Page Content */}
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className="flex-1 p-4 overflow-y-auto bg-background dark:bg-gray-900 dark:text-white transition-colors duration-200">
               {pageLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
                 </div>
               ) : pageError ? (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
                   <p>Error loading content: {pageError}</p>
                 </div>
               ) : clickedItem ? (
                 <div className="notion-container max-w-4xl mx-auto py-6">
-                  {pageBlocks ? (
-                    renderNotionContent()
+                  {recordMap ? (
+                    // Use NotionRenderer if we have a properly formatted recordMap
+                    <NotionRenderer
+                      recordMap={recordMap}
+                      fullPage={false}
+                      darkMode={darkMode}
+                      mapPageUrl={(pageId) => `/docs?id=${pageId}`}
+                    />
+                  ) : pageBlocks ? (
+                    // Use custom renderer if we have block array format
+                    <div className="custom-notion-content">
+                      {renderBlockContent(pageBlocks)}
+                    </div>
                   ) : (
                     <p className="text-muted-foreground">No content available for this item.</p>
                   )}
