@@ -18,19 +18,26 @@ import {
 
 // Import react-notion-x and related dependencies
 import { NotionRenderer } from 'react-notion-x';
+import type { ExtendedRecordMap } from 'notion-types';
 // Import required styles
 import 'react-notion-x/src/styles.css';
 // Uncomment these if you need additional styling features
 // import 'prismjs/themes/prism-tomorrow.css'; // For code syntax highlighting
 // import 'katex/dist/katex.min.css'; // For math equations
 
-
+// Define types for the Notion data
+interface NotionItem {
+  id: string;
+  title: string;
+  url?: string;
+  // Add any other properties that might be present in your Notion items
+}
 
 export default function Page() {
   const pathname = usePathname();
 
   // Extract the last segment from the URL path
-  const getInitialActiveItem = () => {
+  const getInitialActiveItem = (): string => {
     // Default to "Docs" if no path segment matches
     let activeItem = "Docs";
 
@@ -51,28 +58,28 @@ export default function Page() {
   };
 
   // Initialize state with the value from URL
-  const [activeNavItem, setActiveNavItem] = useState(getInitialActiveItem());
+  const [activeNavItem, setActiveNavItem] = useState<string>(getInitialActiveItem());
 
   // State to store the fetched data
-  const [notionData, setNotionData] = useState([]);
+  const [notionData, setNotionData] = useState<NotionItem[]>([]);
 
   // State for loading status
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   // State for errors
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Sidebar menu clicked item
-  const [clickedItem, setClickedItem] = useState(null);
+  const [clickedItem, setClickedItem] = useState<NotionItem | null>(null);
 
   // State to store the fetched page content
-  const [pageContent, setPageContent] = useState(null);
+  const [pageContent, setPageContent] = useState<ExtendedRecordMap | null>(null);
 
   // State for page content loading status
-  const [pageLoading, setPageLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState<boolean>(false);
 
   // State for page content errors
-  const [pageError, setPageError] = useState(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Update activeNavItem when pathname changes
   useEffect(() => {
@@ -80,7 +87,7 @@ export default function Page() {
   }, [pathname]);
 
   // Handler for updating active nav item
-  const handleNavItemChange = (itemTitle) => {
+  const handleNavItemChange = (itemTitle: string): void => {
     setActiveNavItem(itemTitle);
     console.log("Active navigation item changed to:", itemTitle);
   };
@@ -181,7 +188,7 @@ export default function Page() {
   }, [clickedItem]);
 
   // Extract page ID from Notion URL
-  function extractPageIdFromUrl(url) {
+  function extractPageIdFromUrl(url: string): string {
     // Extract the last part of the URL which typically contains the page ID
     const urlParts = url.split('/');
     const lastPart = urlParts[urlParts.length - 1];
@@ -212,6 +219,7 @@ export default function Page() {
         <SidebarProvider>
           <div className="w-64 border-r bg-muted/20 h-[calc(100vh-64px)] overflow-y-auto hidden md:block">
             <AppSidebar
+              className="mt-20"
               setClickedItem={setClickedItem}
               notionData={notionData}
               isLoading={isLoading}
@@ -255,7 +263,7 @@ export default function Page() {
                 <div className="notion-container max-w-4xl mx-auto py-6">
                   {pageContent ? (
                     <NotionRenderer
-                      recordMap={pageContent ?? {}}
+                      recordMap={pageContent as ExtendedRecordMap}
                       fullPage={false}
                       darkMode={false}
                     // Uncomment if you have components for these block types
