@@ -1,31 +1,31 @@
 'use client';
 
-import { useEffect } from "react";
 import { NotionProvider } from "@/context/NotionContext";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Navbar1 } from "@/components/Navbar1";
-import { DarkModeToggle } from "@/components/dashboard/DarkModeToggle";
+import { ThemeToggle } from "@/components/dashboard/ThemeToggle";
 import { PageBreadcrumb } from "@/components/dashboard/PageBreadcrumb";
 import { MainContent } from "@/components/layout/MainContent";
 import { useNavigation } from "@/hooks/useNavigation";
-import { useDarkMode } from "@/hooks/useDarkMode";
+import { useTheme } from "@/hooks/useTheme";
 import { useNotionContext } from "@/context/NotionContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { useEffect } from "react";
 
 export default function Page() {
-  // Use custom hooks for navigation and dark mode
+  // Use custom hooks for navigation and theme
   const { activeNavItem, setActiveNavItem, slug } = useNavigation();
-  const { darkMode } = useDarkMode();
+  const { mode, isDark } = useTheme();
 
-  // Add a debugging useEffect
+  // For debugging - only runs on client side
   useEffect(() => {
-    console.log("Page rendered with darkMode:", darkMode);
-    console.log("Current document classes:", document.documentElement.classList.toString());
-  }, [darkMode]);
+    console.log("Theme mode:", mode);
+    console.log("Dark mode applied:", isDark);
+    console.log("Dark class present:", document.documentElement.classList.contains('dark'));
+  }, [mode, isDark]);
 
   return (
     <NotionProvider>
-      {/* Don't add the dark class here since it's managed by useDarkMode */}
       <div className="flex flex-col h-screen">
         {/* Fixed Top Navigation Bar with active state management */}
         <div className="sticky top-0 z-50 border-b bg-background">
@@ -39,7 +39,7 @@ export default function Page() {
         <div className="flex flex-1 overflow-hidden">
           {/* App Sidebar (Nav) wrapped in provider but outside the inset */}
           <SidebarProvider>
-            <div className="w-64 border-r bg-muted/20 h-[calc(100vh-64px)] overflow-y-auto hidden md:block">
+            <div className="w-64 border-r bg-sidebar h-[calc(100vh-64px)] overflow-y-auto hidden md:block">
               <AppSidebar
                 className="mt-20"
                 activeNavItem={activeNavItem}
@@ -48,16 +48,16 @@ export default function Page() {
 
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Secondary Header with Breadcrumb and dark mode toggle */}
-              <header className="flex h-16 items-center justify-between gap-2 border-b px-4 bg-background sticky top-0 z-40">
+              {/* Secondary Header with Breadcrumb and theme toggle */}
+              <header className="flex h-16 items-center justify-between gap-2 border-b px-4 bg-card sticky top-0 z-40">
                 <PageBreadcrumbWrapper activeNavItem={activeNavItem} />
-                <DarkModeToggle />
+                <ThemeToggle initialMode={mode} />
               </header>
 
-              {/* Main Page Content */}
+              {/* Main Page Content - Remove window access here */}
               <MainContent 
                 activeNavItem={activeNavItem}
-                darkMode={darkMode}
+                darkMode={isDark}
                 slug={slug}
               />
             </div>
