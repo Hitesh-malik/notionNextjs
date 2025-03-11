@@ -1,7 +1,9 @@
-import * as React from "react"
-import { useState, useEffect } from "react"
-import { SearchForm } from "./search-form"
-import { VersionSwitcher } from "./version-switcher"
+'use client';
+
+import * as React from "react";
+import { useState, useEffect } from "react";
+import { useNotionContext } from "@/context/NotionContext";
+import { NotionItem } from "@/types/notion";
 import {
   Sidebar,
   SidebarContent,
@@ -13,18 +15,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 
-// Define interfaces for the component props and data structure
-interface NotionItem {
-  id: string;
-  title: string;
-  url?: string;
-  category?: string;
-  isActive?: boolean;
-  [key: string]: any; // For any additional properties
-}
-
+// Define interfaces for the component's internal data structure
 interface SidebarGroup {
   title: string;
   url: string;
@@ -36,19 +29,16 @@ interface SidebarData {
 }
 
 interface AppSidebarProps extends React.HTMLAttributes<HTMLDivElement> {
-  setClickedItem: (item: NotionItem) => void;
-  notionData: NotionItem[];
-  isLoading: boolean;
   activeNavItem: string;
 }
 
 export function AppSidebar({ 
-  setClickedItem, 
-  notionData, 
-  isLoading, 
   activeNavItem,
   ...props 
 }: AppSidebarProps) {
+  // Get Notion data from context
+  const { notionData, isLoading, setClickedItem, fetchPageBlocks } = useNotionContext();
+  
   // State for the sidebar data structure
   const [sidebarData, setSidebarData] = useState<SidebarData>({
     navMain: []
@@ -87,29 +77,33 @@ export function AppSidebar({
     }
   }, [notionData, activeNavItem]);
 
-  // Handle item click
+  // Handle item click - Direct approach to ensure it works
   const handleItemClick = (item: NotionItem): void => {
-    if (setClickedItem) {
-      // Update the sidebar data to mark the clicked item as active
-      setSidebarData(prevData => {
-        const updatedNavMain = prevData.navMain.map(group => {
-          const updatedItems = group.items.map(menuItem => ({
-            ...menuItem,
-            isActive: menuItem.id === item.id // Set isActive based on item ID match
-          }));
-          return { ...group, items: updatedItems };
-        });
-        return { ...prevData, navMain: updatedNavMain };
+    console.log("Sidebar item clicked:", item.title, item.id);
+    
+    // Update the sidebar data to mark the clicked item as active
+    setSidebarData(prevData => {
+      const updatedNavMain = prevData.navMain.map(group => {
+        const updatedItems = group.items.map(menuItem => ({
+          ...menuItem,
+          isActive: menuItem.id === item.id // Set isActive based on item ID match
+        }));
+        return { ...group, items: updatedItems };
       });
-      
-      // Call the parent's setClickedItem function
-      setClickedItem(item);
+      return { ...prevData, navMain: updatedNavMain };
+    });
+    
+    // Set clicked item in context
+    setClickedItem(item);
+    
+    // Directly fetch page blocks - belt and suspenders approach
+    if (item && item.id) {
+      fetchPageBlocks(item.id);
     }
   };
 
   return (
     <Sidebar {...props}>
-      {/* Optional: Add search functionality */}
       <SidebarHeader className="p-4 border-b">
         <h2 className="text-lg font-semibold tracking-tight mb-2">{activeNavItem || "Documentation"}</h2>
         <div className="relative">
@@ -146,10 +140,9 @@ export function AppSidebar({
                             : 'hover:bg-accent/50 hover:text-foreground hover:font-medium'
                           }
                         `}
-                        onClick={() => handleItemClick(menuItem)}
                       >
                         <a 
-                          href={menuItem.url || "#"} 
+                          href="#"
                           className={`flex items-center w-full ${menuItem.isActive ? 'text-primary' : 'text-foreground/80'}`}
                           onClick={(e) => {
                             e.preventDefault(); // Prevent navigation
