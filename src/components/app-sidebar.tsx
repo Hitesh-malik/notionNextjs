@@ -135,7 +135,7 @@ export function AppSidebar({
               <SidebarGroupContent>
                 <SidebarMenu>
                   {item.items.map((menuItem) => (
-                    <SidebarMenuItem key={menuItem.title || menuItem.id} className={menuItem.isActive ? 'sidebar-item-active' : 'sidebar-item-hover'}>
+                    <SidebarMenuItem key={menuItem.id} className={menuItem.isActive ? 'sidebar-item-active' : 'sidebar-item-hover'}>
                       <SidebarMenuButton 
                         asChild 
                         isActive={menuItem.isActive}
