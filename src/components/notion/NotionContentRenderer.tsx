@@ -36,7 +36,7 @@ export function NotionContentRenderer({ recordMap, pageBlocks, darkMode }: Notio
           );
         case 'heading_1':
           return (
-            <h1 key={id || index} className="text-3xl font-bold my-4">
+            <h1 id={id || `heading-${index}`} key={id || index} className="text-3xl font-bold my-4 pt-6 scroll-mt-20">
               {block.heading_1?.rich_text?.map((text: any, i: number) => (
                 <span key={i}>{text.plain_text}</span>
               )) || ''}
@@ -44,7 +44,7 @@ export function NotionContentRenderer({ recordMap, pageBlocks, darkMode }: Notio
           );
         case 'heading_2':
           return (
-            <h2 key={id || index} className="text-2xl font-bold my-3">
+            <h2 id={id || `heading-${index}`} key={id || index} className="text-2xl font-bold my-3 pt-5 scroll-mt-20">
               {block.heading_2?.rich_text?.map((text: any, i: number) => (
                 <span key={i}>{text.plain_text}</span>
               )) || ''}
@@ -52,7 +52,7 @@ export function NotionContentRenderer({ recordMap, pageBlocks, darkMode }: Notio
           );
         case 'heading_3':
           return (
-            <h3 key={id || index} className="text-xl font-bold my-2">
+            <h3 id={id || `heading-${index}`} key={id || index} className="text-xl font-bold my-2 pt-4 scroll-mt-20">
               {block.heading_3?.rich_text?.map((text: any, i: number) => (
                 <span key={i}>{text.plain_text}</span>
               )) || ''}
