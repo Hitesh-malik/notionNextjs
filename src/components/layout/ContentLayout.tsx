@@ -1,12 +1,13 @@
 'use client';
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { NotionContentRenderer } from "@/components/notion/NotionContentRenderer";
 import { PlaceholderContent } from "@/components/notion/PlaceholderContent";
 import { ErrorDisplay } from "@/components/notion/ErrorDisplay";
 import { LoadingSpinner } from "@/components/dashboard/LoadingSpinner";
 import { DocumentDetailsPanel } from "@/components/notion/DocumentDetailsPanel";
 import { useNotionContext } from "@/context/NotionContext";
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface ContentLayoutProps {
   children?: ReactNode;
@@ -23,11 +24,41 @@ export function ContentLayout({ children, activeNavItem, darkMode }: ContentLayo
     pageError
   } = useNotionContext();
 
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 0);
+  const [isDetailsPanelVisible, setIsDetailsPanelVisible] = useState(true);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const newWidth = window.innerWidth;
+      setWindowWidth(newWidth);
+      
+      // Automatically hide details panel if width is less than 120px
+      if (newWidth <= 120) {
+        setIsDetailsPanelVisible(false);
+      } else {
+        setIsDetailsPanelVisible(true);
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('resize', handleResize);
+
+    // Initial check
+    handleResize();
+
+    // Cleanup
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const toggleDetailsPanel = () => {
+    setIsDetailsPanelVisible(!isDetailsPanelVisible);
+  };
+
   return (
     <>
       {/* Main Content Area - This should be scrollable */}
       <div className="w-full overflow-auto main-content">
-        <div className={`px-4 py-6 pb-40 mx-auto ${clickedItem ? 'lg:pr-64' : ''}`} style={{ maxWidth: '860px' }}>
+        <div className={`px-4 py-6 pb-40 mx-auto ${clickedItem && isDetailsPanelVisible ? 'lg:pr-64' : ''}`} style={{ maxWidth: '860px' }}>
           {pageLoading ? (
             <LoadingSpinner className="h-[60vh]" size="lg" />
           ) : pageError ? (
@@ -74,8 +105,24 @@ export function ContentLayout({ children, activeNavItem, darkMode }: ContentLayo
         </div>
       </div>
       
-      {/* Right Side Details Panel - Fixed position */}
-      {clickedItem && <DocumentDetailsPanel clickedItem={clickedItem} />}
+      {/* Right Side Details Panel - Fixed position with responsive behavior */}
+      {clickedItem && windowWidth > 120 && (
+        <>
+          <button 
+            onClick={toggleDetailsPanel}
+            className={`fixed right-2 top-1/2 transform -translate-y-1/2 
+                       bg-gray-200 dark:bg-gray-700 p-2 rounded-full z-50 shadow-md 
+                       ${isDetailsPanelVisible ? '' : 'bg-opacity-50'}`}
+          >
+            {isDetailsPanelVisible ? <ChevronRight /> : <ChevronLeft />}
+          </button>
+
+          <div className={`details-panel bg-white dark:bg-gray-900 border-l transition-all duration-300 ease-in-out
+            ${isDetailsPanelVisible ? 'translate-x-0' : 'translate-x-full'}`}>
+            <DocumentDetailsPanel clickedItem={clickedItem} />
+          </div>
+        </>
+      )}
       
       {/* Custom scrollbar styles */}
       <style jsx global>{`
@@ -110,6 +157,17 @@ export function ContentLayout({ children, activeNavItem, darkMode }: ContentLayo
         
         .dark .main-content::-webkit-scrollbar-thumb:hover {
           background-color: rgba(100, 100, 100, 0.7);
+        }
+
+        /* Details panel */
+        .details-panel {
+          width: 256px;
+          position: fixed;
+          right: 0;
+          top: 128px;
+          bottom: 0;
+          z-index: 20;
+          overflow-y: auto;
         }
       `}</style>
     </>
